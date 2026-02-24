@@ -79,8 +79,28 @@ async function getSwapQuote(sellTokenSymbol, buyTokenSymbol, sellAmount, account
   return { quote: quotes[0], sellToken, buyToken };
 }
 
+const DEFAULT_PAYMASTER_URL = 'https://starknet.paymaster.avnu.fi';
+const ALLOWED_PAYMASTER_HOSTS = new Set([
+  'starknet.paymaster.avnu.fi',
+  'sepolia.paymaster.avnu.fi'
+]);
+
+function resolvePaymasterUrl() {
+  const value = process.env.PAYMASTER_URL || DEFAULT_PAYMASTER_URL;
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`Invalid PAYMASTER_URL: ${value}`);
+  }
+  if (!ALLOWED_PAYMASTER_HOSTS.has(parsed.hostname)) {
+    throw new Error(`Untrusted paymaster host: ${parsed.hostname}`);
+  }
+  return parsed.toString();
+}
+
 const paymaster = new PaymasterRpc({
-  nodeUrl: process.env.PAYMASTER_URL || 'https://starknet.paymaster.avnu.fi',
+  nodeUrl: resolvePaymasterUrl(),
 });
 
 async function executeAvnuSwap(quote, account, slippage = DEFAULT_SLIPPAGE) {
