@@ -1192,15 +1192,12 @@ async function waitForAuthorization(skipAuth = false) {
 }
 
 // Execute a child script and return parsed JSON result
-async function executeScript(scriptPath, args, privateKey = null) {
-  const childEnv = privateKey
-    ? { ...process.env, PRIVATE_KEY: privateKey }
-    : process.env;
+async function executeScript(scriptPath, args) {
   return new Promise((resolve, reject) => {
     const child = spawn('node', [scriptPath, JSON.stringify(args)], {
       cwd: __dirname,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: childEnv
+      env: process.env
     });
     
     let stdout = '';
