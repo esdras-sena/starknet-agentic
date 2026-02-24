@@ -17,6 +17,12 @@ This skill provides **agent-facing scripts** for:
 - Preflight (simulate + fee estimate)
 - Allowance checks with human amounts
 
+## Quick Reference
+- Deep dives: `references/` (ABI discovery, Typhoon account flow, preflight/fee simulation notes)
+- Account flow examples: `scripts/create-account.js`, `scripts/parse-smart.js`, `scripts/resolve-smart.js`
+- Read/write examples: `scripts/read-smart.js`, `scripts/invoke-contract.js`, `scripts/avnu-swap.js`
+- Allowance checks example: `scripts/read-smart.js` (call ERC20 `allowance(owner, spender)`)
+
 ## Prerequisites
 
 ```bash
