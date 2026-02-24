@@ -14,15 +14,14 @@
  *
  * Usage examples:
  *   node scripts/loot-survivor.js '{"mode":"state","adventurerId":123}'
- *   node scripts/loot-survivor.js '{"mode":"start_game","adventurerId":123,"weapon":0, "privateKey":"0x..","accountAddress":"0x.."}'
+ *   node scripts/loot-survivor.js '{"mode":"start_game","adventurerId":123,"weapon":0,"accountAddress":"0x.."}'
  *
- * If privateKey/accountAddress are omitted for write modes, PRIVATE_KEY env can be used
- * and accountAddress must be provided.
+ * For write modes, private key is loaded from ~/.openclaw/secrets/starknet via accountAddress.
  */
 
 import { Provider, Account, Contract, CallData, shortString } from 'starknet';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from 'fs';
+import { join, isAbsolute } from 'path';
 import { homedir } from 'os';
 import { resolveRpcUrl } from './_rpc.js';
 
@@ -117,6 +116,45 @@ function savePersistedAdventurerId(accountAddress, adventurerId) {
 function fail(message, extra = {}) {
   console.error(JSON.stringify({ success: false, error: message, ...extra }));
   process.exit(1);
+}
+
+function getSecretsDir() {
+  return join(homedir(), '.openclaw', 'secrets', 'starknet');
+}
+
+function loadPrivateKeyByAccountAddress(accountAddress) {
+  const dir = getSecretsDir();
+  if (!existsSync(dir)) fail('Missing secrets directory: ~/.openclaw/secrets/starknet');
+
+  const files = readdirSync(dir).filter(f => f.endsWith('.json'));
+  const target = String(accountAddress).toLowerCase();
+
+  for (const file of files) {
+    const accountPath = join(dir, file);
+    let data;
+    try {
+      data = JSON.parse(readFileSync(accountPath, 'utf8'));
+    } catch {
+      continue;
+    }
+
+    if (String(data.address || '').toLowerCase() !== target) continue;
+
+    if (!(typeof data.privateKeyPath === 'string' && data.privateKeyPath.trim().length > 0)) {
+      fail('Account is missing privateKeyPath (file-based key is required).');
+    }
+
+    const keyPath = isAbsolute(data.privateKeyPath)
+      ? data.privateKeyPath
+      : join(dir, data.privateKeyPath);
+
+    if (!existsSync(keyPath)) fail(`Private key file not found: ${keyPath}`);
+    const privateKey = readFileSync(keyPath, 'utf8').trim();
+    if (!privateKey) fail('Private key file is empty.');
+    return privateKey;
+  }
+
+  fail(`Account not found in ~/.openclaw/secrets/starknet for address: ${accountAddress}`);
 }
 
 function parseJsonArg() {
@@ -331,10 +369,10 @@ async function main() {
   }
 
   // Write modes need account
-  const privateKey = input.privateKey || process.env.PRIVATE_KEY;
   const accountAddress = input.accountAddress;
-  if (!privateKey) fail('Missing privateKey (or PRIVATE_KEY env) for write mode');
   if (!accountAddress) fail('Missing accountAddress for write mode');
+  if (input.privateKey) fail('Do not pass privateKey in JSON input.');
+  const privateKey = loadPrivateKeyByAccountAddress(accountAddress);
 
   const account = new Account({
     provider,
