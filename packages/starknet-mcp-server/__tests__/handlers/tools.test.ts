@@ -173,6 +173,10 @@ describe("MCP Tool Handlers", () => {
     mockEstimatePaymasterTransactionFee.mockResolvedValue({
       suggested_max_fee_in_gas_token: "0",
     });
+    mockWaitForTransaction.mockResolvedValue({
+      execution_status: "SUCCEEDED",
+      finality_status: "ACCEPTED_ON_L2",
+    });
     capturedToolHandler = null;
     capturedListHandler = null;
 
@@ -424,6 +428,27 @@ describe("MCP Tool Handlers", () => {
       expect(response.isError).toBe(true);
       const result = parseResponse(response);
       expect(result.error).toBe(true);
+    });
+
+    it("returns error when transaction receipt is reverted", async () => {
+      mockExecute.mockResolvedValue({ transaction_hash: "0xabc123" });
+      mockWaitForTransaction.mockResolvedValue({
+        execution_status: "REVERTED",
+        finality_status: "ACCEPTED_ON_L2",
+        revert_reason: "Spending: exceeds per-call",
+      });
+
+      const response = await callTool("starknet_transfer", {
+        recipient,
+        token: "ETH",
+        amount: "1",
+      });
+
+      expect(response.isError).toBe(true);
+      const result = parseResponse(response);
+      expect(result.error).toBe(true);
+      expect(result.message).toContain("failed during starknet_transfer");
+      expect(result.message).toContain("Spending: exceeds per-call");
     });
   });
 
@@ -963,7 +988,10 @@ describe("MCP Tool Handlers", () => {
       mockGetQuotes.mockResolvedValue([mockQuote]);
       mockQuoteToCalls.mockResolvedValue({ calls: [], chainId: "SN_MAIN" });
       mockExecute.mockResolvedValue({ transaction_hash: "0x123" });
-      mockWaitForTransaction.mockResolvedValue({});
+      mockWaitForTransaction.mockResolvedValue({
+        execution_status: "SUCCEEDED",
+        finality_status: "ACCEPTED_ON_L2",
+      });
 
       await callTool("starknet_swap", {
         sellToken: "ETH",
@@ -976,6 +1004,35 @@ describe("MCP Tool Handlers", () => {
         expect.objectContaining({ slippage: 0.02 }),
         expect.any(Object)
       );
+    });
+
+    it("returns error when swap receipt is reverted", async () => {
+      mockGetQuotes.mockResolvedValue([mockQuote]);
+      mockQuoteToCalls.mockResolvedValue({
+        calls: [
+          { contractAddress: TOKENS.ETH, entrypoint: "approve", calldata: [] },
+          { contractAddress: "0xrouter", entrypoint: "swap", calldata: [] },
+        ],
+        chainId: "SN_MAIN",
+      });
+      mockExecute.mockResolvedValue({ transaction_hash: "0xswapbad" });
+      mockWaitForTransaction.mockResolvedValue({
+        execution_status: "REVERTED",
+        finality_status: "ACCEPTED_ON_L2",
+        revert_reason: "Spending: exceeds window limit",
+      });
+
+      const response = await callTool("starknet_swap", {
+        sellToken: "ETH",
+        buyToken: "USDC",
+        amount: "1",
+      });
+
+      expect(response.isError).toBe(true);
+      const result = parseResponse(response);
+      expect(result.error).toBe(true);
+      expect(result.message).toContain("failed during starknet_swap");
+      expect(result.message).toContain("Spending: exceeds window limit");
     });
   });
 

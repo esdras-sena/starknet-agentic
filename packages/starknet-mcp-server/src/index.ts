@@ -334,6 +334,66 @@ function validateEntrypoint(name: string, value: string): string {
 const TX_WAIT_RETRIES = 40;
 const TX_WAIT_INTERVAL_MS = 3_000;
 
+type TxReceiptLike = {
+  transaction_hash?: string;
+  execution_status?: string;
+  statusReceipt?: string;
+  revert_reason?: string | null;
+  isSuccess?: () => boolean;
+  isReverted?: () => boolean;
+};
+
+function normalizeReceiptStatus(receipt?: TxReceiptLike): string {
+  if (!receipt) return "UNKNOWN";
+  const executionStatus =
+    typeof receipt.execution_status === "string" ? receipt.execution_status.toUpperCase() : undefined;
+  const legacyStatus =
+    typeof receipt.statusReceipt === "string" ? receipt.statusReceipt.toUpperCase() : undefined;
+  return executionStatus ?? legacyStatus ?? "UNKNOWN";
+}
+
+function isReceiptSuccessful(receipt?: TxReceiptLike): boolean {
+  if (!receipt) return false;
+  if (typeof receipt.isSuccess === "function") {
+    try {
+      return Boolean(receipt.isSuccess());
+    } catch {
+      // Fall back to explicit status fields below.
+    }
+  }
+
+  const status = normalizeReceiptStatus(receipt);
+  if (status === "SUCCEEDED") return true;
+  if (status === "REVERTED") return false;
+
+  const revertReason =
+    typeof receipt.revert_reason === "string" ? receipt.revert_reason.trim() : "";
+  return revertReason.length === 0;
+}
+
+async function waitForTransactionSuccess(
+  transactionHash: string,
+  context: string,
+): Promise<TxReceiptLike> {
+  const receipt = (await provider.waitForTransaction(transactionHash, {
+    retries: TX_WAIT_RETRIES,
+    retryInterval: TX_WAIT_INTERVAL_MS,
+  })) as TxReceiptLike;
+
+  if (!isReceiptSuccessful(receipt)) {
+    const status = normalizeReceiptStatus(receipt);
+    const revertReason =
+      typeof receipt.revert_reason === "string" && receipt.revert_reason.trim().length > 0
+        ? receipt.revert_reason.trim()
+        : "No revert reason provided";
+    throw new Error(
+      `Transaction ${transactionHash} failed during ${context} (status=${status}): ${revertReason}`
+    );
+  }
+
+  return receipt;
+}
+
 /**
  * Reject an AVNU quote whose server-provided expiry has already passed.
  * The `expiry` field is a Unix-seconds timestamp set by the AVNU router;
@@ -1230,7 +1290,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
 
         const transactionHash = await executeTransaction(transferCall, gasfree, gasTokenAddress);
-        await provider.waitForTransaction(transactionHash, { retries: TX_WAIT_RETRIES, retryInterval: TX_WAIT_INTERVAL_MS });
+        await waitForTransactionSuccess(transactionHash, "starknet_transfer");
 
         return {
           content: [
@@ -1299,7 +1359,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
 
         const transactionHash = await executeTransaction(invokeCall, gasfree, gasTokenAddress);
-        await provider.waitForTransaction(transactionHash, { retries: TX_WAIT_RETRIES, retryInterval: TX_WAIT_INTERVAL_MS });
+        await waitForTransactionSuccess(transactionHash, "starknet_invoke_contract");
 
         return {
           content: [
@@ -1348,7 +1408,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         const gasTokenAddress = gasToken ? await resolveTokenAddressAsync(gasToken) : TOKENS.STRK;
         const transactionHash = await executeTransaction(calls, gasfree, gasTokenAddress);
-        await provider.waitForTransaction(transactionHash, { retries: TX_WAIT_RETRIES, retryInterval: TX_WAIT_INTERVAL_MS });
+        await waitForTransactionSuccess(transactionHash, "starknet_vesu_deposit");
 
         return {
           content: [
@@ -1397,7 +1457,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         const gasTokenAddress = gasToken ? await resolveTokenAddressAsync(gasToken) : TOKENS.STRK;
         const transactionHash = await executeTransaction(calls, gasfree, gasTokenAddress);
-        await provider.waitForTransaction(transactionHash, { retries: TX_WAIT_RETRIES, retryInterval: TX_WAIT_INTERVAL_MS });
+        await waitForTransactionSuccess(transactionHash, "starknet_vesu_withdraw");
 
         return {
           content: [
@@ -1545,7 +1605,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         const gasTokenAddress = gasToken ? await resolveTokenAddressAsync(gasToken) : sellTokenAddress;
         const transactionHash = await executeTransaction(calls, gasfree, gasTokenAddress);
-        await provider.waitForTransaction(transactionHash, { retries: TX_WAIT_RETRIES, retryInterval: TX_WAIT_INTERVAL_MS });
+        await waitForTransactionSuccess(transactionHash, "starknet_swap");
 
         const tokenService = getTokenService();
         const buyDecimals = await tokenService.getDecimalsAsync(buyTokenAddress);
@@ -1815,10 +1875,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           : () => account.execute([registerCall]);
 
         const result = await executeFn();
-        await provider.waitForTransaction(result.transaction_hash, {
-          retries: TX_WAIT_RETRIES,
-          retryInterval: TX_WAIT_INTERVAL_MS,
-        });
+        await waitForTransactionSuccess(result.transaction_hash, "starknet_register_session_key");
 
         return {
           content: [
@@ -1877,10 +1934,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           : () => account.execute([revokeCall]);
 
         const result = await executeFn();
-        await provider.waitForTransaction(result.transaction_hash, {
-          retries: TX_WAIT_RETRIES,
-          retryInterval: TX_WAIT_INTERVAL_MS,
-        });
+        await waitForTransactionSuccess(result.transaction_hash, "starknet_revoke_session_key");
 
         return {
           content: [
@@ -2181,7 +2235,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
 
         const transactionHash = await executeTransaction(deployCall, gasfree);
-        const receipt = await provider.waitForTransaction(transactionHash, { retries: TX_WAIT_RETRIES, retryInterval: TX_WAIT_INTERVAL_MS });
+        const receipt = await waitForTransactionSuccess(transactionHash, "starknet_deploy_agent_account");
         const { accountAddress, agentId } = parseDeployResultFromReceipt(
           receipt,
           env.AGENT_ACCOUNT_FACTORY_ADDRESS
@@ -2234,10 +2288,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
 
         const transactionHash = await executeTransaction(call, gasfree);
-        const receipt = await provider.waitForTransaction(transactionHash, {
-          retries: TX_WAIT_RETRIES,
-          retryInterval: TX_WAIT_INTERVAL_MS,
-        });
+        const receipt = await waitForTransactionSuccess(transactionHash, "starknet_register_agent");
         const { agentId } = parseIdentityRegisteredFromReceipt(receipt, identity);
 
         return {
@@ -2296,10 +2347,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
 
         const transactionHash = await executeTransaction(call, gasfree);
-        await provider.waitForTransaction(transactionHash, {
-          retries: TX_WAIT_RETRIES,
-          retryInterval: TX_WAIT_INTERVAL_MS,
-        });
+        await waitForTransactionSuccess(transactionHash, "starknet_set_agent_metadata");
 
         return {
           content: [
