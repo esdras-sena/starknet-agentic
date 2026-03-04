@@ -87,3 +87,31 @@ Before execute mode:
 1. On-chain Base->Starknet attestation settlement/verification.
 2. Native session-key registration step in this runner.
 3. Provenance chain export integration (CBOM/EAR style envelope).
+
+## Latest Verified Evidence (March 4, 2026)
+
+This run combined the two demo runners to prove DeFi execution and security controls with live Sepolia data.
+
+Artifacts:
+
+- Secure demo report:
+  - `examples/secure-defi-demo/artifacts/secure-defi-demo-516a8d17-2af9-4170-bf30-3afcdc1136f2.json`
+  - `examples/secure-defi-demo/artifacts/secure-defi-demo-516a8d17-2af9-4170-bf30-3afcdc1136f2.md`
+- Signed Base attestation fixture:
+  - `examples/secure-defi-demo/artifacts/base-attestation-demo.json`
+- Swarm/proxy run log (session key + policy/revocation probes):
+  - `examples/full-stack-swarm/artifacts/swarm-demo-20260304-080847.log`
+
+Key transaction evidence (Starknet Sepolia):
+
+1. Allowed transfer succeeded:
+   - `0x8dfd41b6b6a473bf53bb92a1ec086ed8287c9652b109c52dedd98a36d15e95` (`SUCCEEDED`)
+2. Vesu deposit succeeded:
+   - `0x2916384313cd7e6aefa4284d11e7e62d0019aec5858243eb44537d3a0ce334` (`SUCCEEDED`)
+3. Proxy-mode swap succeeded with session key:
+   - `0x55953168086ab15a4f9b04244107b0f8676b6f2e2b42cf2efe328ac2eb6ab69` (`SUCCEEDED`)
+4. Oversized action denied by on-chain spending policy:
+   - `0x3900f732b2e9061350be30707ca7bcf48d16b346041c85ebbff3b90772a3609` (`REVERTED`, reason includes `Spending: exceeds per-call`)
+5. Session revocation transaction succeeded:
+   - `0x43c34a21cf30e5b187ef1b2e4c56157cf3c7d1672ac5899b5b82caabb33e6e9` (`SUCCEEDED`)
+   - Subsequent action attempt in same run was blocked by account validation (`validate` returned `0x0`), recorded in run log.
