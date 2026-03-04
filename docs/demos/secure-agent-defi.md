@@ -63,6 +63,8 @@ Before execute mode:
    - `DEMO_TRANSFER_AMOUNT`
    - `DEMO_VESU_DEPOSIT_AMOUNT`
    - optional `DEMO_VESU_POOL` for non-default deployment
+   - optional `STARKNET_VESU_POOL_FACTORY` for non-mainnet Vesu deployments
+   - optional `DEMO_SWAP_SELL_TOKEN` + `DEMO_SWAP_AMOUNT` for pre-deposit asset swap
 4. Optional sponsored mode:
    - `AVNU_PAYMASTER_API_KEY`
 5. Optional session evidence:

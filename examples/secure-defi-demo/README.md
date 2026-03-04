@@ -81,6 +81,8 @@ For meaningful Vesu scenarios:
 
 - enough `DEMO_VESU_TOKEN` balance for `DEMO_VESU_DEPOSIT_AMOUNT`
 - optional `DEMO_VESU_POOL` if you need a non-default pool address
+- set `STARKNET_VESU_POOL_FACTORY` for non-mainnet deployments (e.g., Sepolia V2)
+- optional `DEMO_SWAP_SELL_TOKEN` + `DEMO_SWAP_AMOUNT` to run `swap -> deposit`
 
 ## Security Notes
 

@@ -94,6 +94,9 @@ export function loadRunConfig(args: CliArgs): RunConfig {
     transferToken: optionalEnv("DEMO_TRANSFER_TOKEN") ?? "STRK",
     transferAmount: optionalEnv("DEMO_TRANSFER_AMOUNT") ?? "0.001",
     rejectionProbeAmount: optionalEnv("DEMO_REJECTION_PROBE_AMOUNT") ?? "999999",
+    swapSellToken: optionalEnv("DEMO_SWAP_SELL_TOKEN"),
+    swapAmount: optionalEnv("DEMO_SWAP_AMOUNT"),
+    swapSlippage: optionalEnv("DEMO_SWAP_SLIPPAGE") ? Number(optionalEnv("DEMO_SWAP_SLIPPAGE")) : undefined,
     vesuToken: optionalEnv("DEMO_VESU_TOKEN") ?? "STRK",
     vesuPool: optionalEnv("DEMO_VESU_POOL"),
     vesuDepositAmount: optionalEnv("DEMO_VESU_DEPOSIT_AMOUNT") ?? "0.01",
@@ -118,6 +121,7 @@ export function buildSidecarEnv(config: RunConfig): Record<string, string> {
     AVNU_PAYMASTER_URL: optionalEnv("AVNU_PAYMASTER_URL") ?? "",
     AVNU_PAYMASTER_API_KEY: optionalEnv("AVNU_PAYMASTER_API_KEY") ?? "",
     AVNU_PAYMASTER_FEE_MODE: optionalEnv("AVNU_PAYMASTER_FEE_MODE") ?? "",
+    STARKNET_VESU_POOL_FACTORY: optionalEnv("STARKNET_VESU_POOL_FACTORY") ?? "",
     AGENT_ACCOUNT_FACTORY_ADDRESS: optionalEnv("AGENT_ACCOUNT_FACTORY_ADDRESS") ?? "",
     ERC8004_IDENTITY_REGISTRY_ADDRESS: optionalEnv("ERC8004_IDENTITY_REGISTRY_ADDRESS") ?? "",
     STARKNET_MCP_POLICY:

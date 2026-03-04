@@ -89,6 +89,11 @@ function isVesuUnavailableError(error: unknown): boolean {
   return /contract not found|vtoken not found|entry point not found|contract not deployed/i.test(message);
 }
 
+function isTimeoutError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /request timed out|timeout/i.test(message);
+}
+
 async function main(): Promise<void> {
   dotenv.config();
 
@@ -264,12 +269,14 @@ async function main(): Promise<void> {
     const positions = await sidecar.callTool("starknet_vesu_positions", vesuArgs);
     return { token: config.vesuToken, positions };
   });
-  if (vesuBefore.status === "failed" && isVesuUnavailableError(vesuBefore.error)) {
+  if (vesuBefore.status === "failed" && (isVesuUnavailableError(vesuBefore.error) || isTimeoutError(vesuBefore.error))) {
     steps.push(
       skippedStep(
         "vesu_positions_before",
         "Read Vesu position before write",
-        `Vesu pool is unavailable for ${config.networkLabel}.`,
+        isTimeoutError(vesuBefore.error)
+          ? `Vesu position query timed out on ${config.networkLabel}.`
+          : `Vesu pool is unavailable for ${config.networkLabel}.`,
       ),
     );
   } else {
@@ -297,6 +304,43 @@ async function main(): Promise<void> {
         ),
       );
     } else {
+      if (config.swapSellToken && config.swapAmount) {
+        if (!hasTool(tools, "starknet_swap")) {
+          steps.push(
+            skippedStep(
+              "swap_into_vesu_asset",
+              "Swap into Vesu deposit asset",
+              "Tool starknet_swap not exposed by MCP server",
+            ),
+          );
+        } else {
+          steps.push(
+            await runStep("swap_into_vesu_asset", "Swap into Vesu deposit asset", async () => {
+              const swap = await sidecar.callTool("starknet_swap", {
+                sellToken: config.swapSellToken,
+                buyToken: config.vesuToken,
+                amount: config.swapAmount,
+                slippage: config.swapSlippage ?? 0.02,
+              });
+              return {
+                sellToken: config.swapSellToken,
+                buyToken: config.vesuToken,
+                amount: config.swapAmount,
+                swap,
+              };
+            }),
+          );
+        }
+      } else {
+        steps.push(
+          skippedStep(
+            "swap_into_vesu_asset",
+            "Swap into Vesu deposit asset",
+            "Set DEMO_SWAP_SELL_TOKEN + DEMO_SWAP_AMOUNT to enable pre-deposit swap.",
+          ),
+        );
+      }
+
       const depositStep = await runStep("vesu_deposit", "Execute Vesu deposit", async () => {
         const tx = await sidecar.callTool("starknet_vesu_deposit", {
           token: config.vesuToken,
@@ -322,12 +366,14 @@ async function main(): Promise<void> {
       const positions = await sidecar.callTool("starknet_vesu_positions", vesuArgs);
       return { token: config.vesuToken, positions };
     });
-    if (vesuAfter.status === "failed" && isVesuUnavailableError(vesuAfter.error)) {
+    if (vesuAfter.status === "failed" && (isVesuUnavailableError(vesuAfter.error) || isTimeoutError(vesuAfter.error))) {
       steps.push(
         skippedStep(
           "vesu_positions_after",
           "Read Vesu position after write",
-          `Vesu pool is unavailable for ${config.networkLabel}.`,
+          isTimeoutError(vesuAfter.error)
+            ? `Vesu position query timed out on ${config.networkLabel}.`
+            : `Vesu pool is unavailable for ${config.networkLabel}.`,
         ),
       );
     } else {
@@ -367,6 +413,7 @@ async function main(): Promise<void> {
     }
   } else {
     steps.push(skippedStep("allowed_transfer_execute", "Execute allowed transfer", "Run with --mode execute"));
+    steps.push(skippedStep("swap_into_vesu_asset", "Swap into Vesu deposit asset", "Run with --mode execute"));
     steps.push(skippedStep("vesu_deposit", "Execute Vesu deposit", "Run with --mode execute"));
     steps.push(skippedStep("vesu_positions_after", "Read Vesu position after write", "Run with --mode execute"));
     steps.push(skippedStep("vesu_withdraw", "Execute Vesu withdraw", "Run with --mode execute --with-withdraw"));

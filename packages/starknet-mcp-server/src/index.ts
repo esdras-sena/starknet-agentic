@@ -63,6 +63,7 @@ import {
   getVTokenAddress,
   buildDepositCalls,
   buildWithdrawCalls,
+  VESU_POOL_FACTORY,
   VESU_PRIME_POOL,
 } from "./helpers/vesu.js";
 import { uint256 } from "starknet";
@@ -91,6 +92,7 @@ const envSchema = z.object({
   // When AVNU_PAYMASTER_API_KEY is set, some orgs only allow "default" fee mode (user pays in gas token).
   // Allow overriding to avoid hard-failing on sponsored mode.
   AVNU_PAYMASTER_FEE_MODE: z.enum(["sponsored", "default"]).optional(),
+  STARKNET_VESU_POOL_FACTORY: z.string().startsWith("0x").optional(),
   AGENT_ACCOUNT_FACTORY_ADDRESS: z.string().startsWith("0x").optional(),
   ERC8004_IDENTITY_REGISTRY_ADDRESS: z.string().startsWith("0x").optional(),
   KEYRING_PROXY_URL: z.string().url().optional(),
@@ -125,6 +127,7 @@ const env = envSchema.parse({
     | "sponsored"
     | "default"
     | undefined,
+  STARKNET_VESU_POOL_FACTORY: process.env.STARKNET_VESU_POOL_FACTORY,
   AGENT_ACCOUNT_FACTORY_ADDRESS: process.env.AGENT_ACCOUNT_FACTORY_ADDRESS,
   ERC8004_IDENTITY_REGISTRY_ADDRESS: process.env.ERC8004_IDENTITY_REGISTRY_ADDRESS,
   KEYRING_PROXY_URL: process.env.KEYRING_PROXY_URL,
@@ -208,6 +211,7 @@ if (isProductionRuntime) {
 
 // Initialize Starknet provider and account
 const provider = new RpcProvider({ nodeUrl: env.STARKNET_RPC_URL, batch: 0 });
+const vesuPoolFactoryAddress = env.STARKNET_VESU_POOL_FACTORY ?? VESU_POOL_FACTORY;
 
 // Fee mode:
 // - sponsored: dApp pays all gas (requires AVNU paymaster to authorize the API key)
@@ -1329,7 +1333,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new Error("Amount must be positive");
         }
 
-        const vTokenAddress = await getVTokenAddress(provider, poolAddress, assetAddress);
+        const vTokenAddress = await getVTokenAddress(
+          provider,
+          poolAddress,
+          assetAddress,
+          vesuPoolFactoryAddress,
+        );
         const calls = buildDepositCalls(
           assetAddress,
           vTokenAddress,
@@ -1373,7 +1382,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new Error("Amount must be positive");
         }
 
-        const vTokenAddress = await getVTokenAddress(provider, poolAddress, assetAddress);
+        const vTokenAddress = await getVTokenAddress(
+          provider,
+          poolAddress,
+          assetAddress,
+          vesuPoolFactoryAddress,
+        );
         const calls = buildWithdrawCalls(
           vTokenAddress,
           amountWei,
@@ -1426,7 +1440,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         for (let i = 0; i < tokens.length; i++) {
           const assetAddress = tokenAddresses[i];
-          const vTokenAddress = await getVTokenAddress(provider, poolAddress, assetAddress);
+          const vTokenAddress = await getVTokenAddress(
+            provider,
+            poolAddress,
+            assetAddress,
+            vesuPoolFactoryAddress,
+          );
 
           const balanceRaw = await provider.callContract({
             contractAddress: vTokenAddress,
