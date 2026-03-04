@@ -44,6 +44,13 @@ function optionalEnv(name: string): string | undefined {
   return value || undefined;
 }
 
+function optionalBoolEnv(name: string, fallback = false): boolean {
+  const value = optionalEnv(name);
+  if (!value) return fallback;
+  const normalized = value.toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "y";
+}
+
 function getDemoRootDir(): string {
   return path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 }
@@ -73,6 +80,7 @@ function resolveMcpEntry(): string {
 
 export function loadRunConfig(args: CliArgs): RunConfig {
   const signerModeRaw = (optionalEnv("STARKNET_SIGNER_MODE") ?? "direct").toLowerCase();
+  const rpcUrl = requiredEnv("STARKNET_RPC_URL");
   if (signerModeRaw !== "direct" && signerModeRaw !== "proxy") {
     throw new Error("STARKNET_SIGNER_MODE must be direct or proxy");
   }
@@ -89,6 +97,7 @@ export function loadRunConfig(args: CliArgs): RunConfig {
   const config = RunConfigSchema.parse({
     mode: args.mode,
     networkLabel: optionalEnv("DEMO_NETWORK_LABEL") ?? "starknet-sepolia",
+    rpcUrl,
     mcpEntry: resolveMcpEntry(),
     accountAddress: requiredEnv("STARKNET_ACCOUNT_ADDRESS"),
     signerMode: signerModeRaw,
@@ -104,7 +113,12 @@ export function loadRunConfig(args: CliArgs): RunConfig {
     vesuWithdrawAmount: args.withWithdraw
       ? optionalEnv("DEMO_VESU_WITHDRAW_AMOUNT") ?? optionalEnv("DEMO_VESU_DEPOSIT_AMOUNT") ?? "0.005"
       : undefined,
+    identityRegistryAddress: optionalEnv("ERC8004_IDENTITY_REGISTRY_ADDRESS"),
     agentId: optionalEnv("DEMO_AGENT_ID"),
+    autoRegisterAgent: optionalBoolEnv("DEMO_AUTO_REGISTER_AGENT", false),
+    agentTokenUri: optionalEnv("DEMO_AGENT_TOKEN_URI"),
+    anchorBaseToErc8004: optionalBoolEnv("DEMO_ANCHOR_BASE_TO_ERC8004", false),
+    baseAnchorMetadataKey: optionalEnv("DEMO_BASE_ANCHOR_KEY") ?? "baseAttestationSha256",
     sessionAccountAddress: optionalEnv("DEMO_SESSION_ACCOUNT_ADDRESS"),
     sessionKeyPublicKey: optionalEnv("DEMO_SESSION_KEY_PUBLIC_KEY"),
     expiredSessionProbeAmount: optionalEnv("DEMO_EXPIRED_SESSION_PROBE_AMOUNT") ?? "0.000001",

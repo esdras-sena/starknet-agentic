@@ -17,10 +17,15 @@ Two runners were used together:
 
 Artifacts:
 
-- `examples/secure-defi-demo/artifacts/secure-defi-demo-516a8d17-2af9-4170-bf30-3afcdc1136f2.json`
-- `examples/secure-defi-demo/artifacts/secure-defi-demo-516a8d17-2af9-4170-bf30-3afcdc1136f2.md`
+- v1 security + DeFi run:
+  - `examples/secure-defi-demo/artifacts/secure-defi-demo-516a8d17-2af9-4170-bf30-3afcdc1136f2.json`
+  - `examples/secure-defi-demo/artifacts/secure-defi-demo-516a8d17-2af9-4170-bf30-3afcdc1136f2.md`
+- v1.1 full-proof run (ERC-8004 + Base anchor):
+  - `examples/secure-defi-demo/artifacts/secure-defi-demo-f1cadd08-87da-4ba9-a557-5a5e3c8bf45a.json`
+  - `examples/secure-defi-demo/artifacts/secure-defi-demo-f1cadd08-87da-4ba9-a557-5a5e3c8bf45a.md`
 - `examples/secure-defi-demo/artifacts/base-attestation-demo.json`
 - `examples/full-stack-swarm/artifacts/swarm-demo-20260304-080847.log`
+- `examples/starkzap-onboard-transfer/demo-evidence.json`
 
 Verified Starknet Sepolia transactions:
 
@@ -37,12 +42,30 @@ Verified Starknet Sepolia transactions:
   `0x43c34a21cf30e5b187ef1b2e4c56157cf3c7d1672ac5899b5b82caabb33e6e9`  
   follow-up action attempt was blocked by account validation (`validate` returned invalid).
 
+v1.1 additions (same day, full-proof profile):
+
+- ERC-8004 register agent tx (`SUCCEEDED`):  
+  `0x14c24c1d2784ce94f25b7a89592276e8fe62563fb8c95ead4dcbed52a466b8`  
+  resolved `agentId = 178`
+- Base attestation hash anchored to ERC-8004 metadata (`SUCCEEDED`):  
+  `0x358a907147409db6a0d21fbd3b37f4c4c518c6ae35fcc3bcf372835acd106be`  
+  key: `baseAttestationSha256`, read-back verified.
+- v1.1 transfer (`SUCCEEDED`):  
+  `0x6ef5364ee8a4ed2f20030ede467eacb5a32087b3dcbc28254a74617071f589e`
+- v1.1 Vesu deposit (`SUCCEEDED`):  
+  `0x0aecbcbea6b9436aca2f9997d091e46d5f9a421bc78936c51e887de308442ad`
+- Starkzap-path transfer receipt (`SUCCEEDED`):  
+  `0x3038127239416ed2afc3f6bfa2c1c64ab7bbee4e9a525df88828ebcf942232b`
+
 ## Security Claims Proven in This Run
 
 1. Safe actions execute: transfer and Vesu deposit succeeded.
 2. Unsafe over-limit action is blocked at account policy level.
 3. Revoked session cannot continue acting successfully.
 4. Runtime records machine-readable evidence (JSON + logs) for audit and postmortem.
+5. ERC-8004 identity evidence is present (`agentId=178`) and queryable.
+6. Base attestation hash is anchored on Starknet (ERC-8004 metadata set + readback).
+7. Starkzap execution path is evidenced with a successful Sepolia transfer receipt.
 
 ## Suggested Screenshots
 
@@ -57,6 +80,8 @@ Use these screenshots for the post/thread:
 7. Swarm JSON section with `deniedByPolicy: true`.
 8. Swarm JSON/log section showing revoked-session block (`validate ... Got Retdata([0x0])`).
 9. Explorer pages for one success tx and one reverted tx side by side.
+10. ERC-8004 anchor proof in v1.1 artifact (`base_attestation_anchor` step).
+11. Starkzap evidence file lines showing submission + confirmation (`demo-evidence.json`).
 
 ## Notes for Publication
 

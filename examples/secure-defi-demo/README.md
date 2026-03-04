@@ -16,6 +16,7 @@ This demo writes an artifact JSON you can keep as audit evidence.
 - Default blocked selector policy rejects privileged entrypoints (`upgrade`, ownership/admin ops).
 - Vesu operations are callable from the same secure runtime.
 - Optional ERC-8004 and session-key state can be attached to the artifact.
+- Optional Base->Starknet anchor can be executed by writing Base attestation hash into ERC-8004 metadata and verifying readback.
 - Base attestation envelope can be schema-validated and signature-verified.
 
 ## What This Demo Does Not Prove
@@ -63,6 +64,15 @@ Execute + withdraw path:
 pnpm --filter @starknet-agentic/secure-defi-demo run:withdraw
 ```
 
+v1.1 full-proof profile (execute + identity + Base anchor):
+
+```bash
+DEMO_AUTO_REGISTER_AGENT=1 \
+DEMO_ANCHOR_BASE_TO_ERC8004=1 \
+DEMO_BASE_ATTESTATION_PATH=./artifacts/base-attestation-demo.json \
+pnpm --filter @starknet-agentic/secure-defi-demo run:execute
+```
+
 ## Output
 
 Artifacts are written to `DEMO_OUTPUT_DIR` (default `./artifacts`).
@@ -97,6 +107,7 @@ For meaningful Vesu scenarios:
 - Policy rejection probe should fail with a policy-limit error; if it succeeds, tighten `DEMO_POLICY_MAX_TRANSFER`.
 - Forbidden selector probe should fail with a blocked-entrypoint policy error.
 - Expired session probe runs only in `--mode execute` + `STARKNET_SIGNER_MODE=proxy` when provided session data is inactive.
+- If `DEMO_ANCHOR_BASE_TO_ERC8004=1` is set, the run includes a `base_attestation_anchor` step that writes and verifies attestation hash metadata on-chain.
 
 ## Signed Base Attestation Format
 

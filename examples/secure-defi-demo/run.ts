@@ -99,6 +99,68 @@ function parseSessionData(result: unknown): SessionState {
   return SessionStateSchema.parse(result);
 }
 
+function normalizeHexAddress(value: string): string {
+  return `0x${BigInt(value).toString(16)}`;
+}
+
+function asNonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+async function fetchReceipt(rpcUrl: string, txHash: string): Promise<unknown> {
+  const response = await fetch(rpcUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "starknet_getTransactionReceipt",
+      params: [txHash],
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`RPC receipt request failed (${response.status})`);
+  }
+  const payload = (await response.json()) as { error?: { message?: string }; result?: unknown };
+  if (payload.error) {
+    throw new Error(payload.error.message || "RPC receipt returned an error");
+  }
+  return payload.result;
+}
+
+function parseRegisteredAgentIdFromReceipt(
+  receipt: unknown,
+  identityRegistryAddress: string,
+): string | null {
+  const events = (receipt as { events?: Array<{ from_address?: string; keys?: string[] }> })?.events;
+  if (!Array.isArray(events)) return null;
+
+  const expectedFrom = normalizeHexAddress(identityRegistryAddress);
+  const maxUint128 = (1n << 128n) - 1n;
+  for (const event of events) {
+    if (!event?.from_address || !Array.isArray(event.keys) || event.keys.length < 3) continue;
+    let from: string;
+    try {
+      from = normalizeHexAddress(event.from_address);
+    } catch {
+      continue;
+    }
+    if (from !== expectedFrom) continue;
+
+    try {
+      const low = BigInt(event.keys[1]);
+      const high = BigInt(event.keys[2]);
+      if (low < 0n || high < 0n || low > maxUint128 || high > maxUint128) {
+        continue;
+      }
+      return (low + (high << 128n)).toString();
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
 function renderMarkdownSummary(artifact: DemoArtifact): string {
   const lines: string[] = [
     "# Secure DeFi Demo Result",
@@ -232,7 +294,49 @@ async function main(): Promise<void> {
     }),
   );
 
-  if (config.agentId) {
+  let resolvedAgentId = config.agentId;
+  if (!resolvedAgentId && config.autoRegisterAgent) {
+    if (!hasTool(tools, "starknet_register_agent")) {
+      steps.push(
+        skippedStep(
+          "erc8004_register_agent",
+          "Register ERC-8004 agent identity",
+          "Tool starknet_register_agent not exposed by MCP server",
+        ),
+      );
+    } else {
+      steps.push(
+        await runStep("erc8004_register_agent", "Register ERC-8004 agent identity", async () => {
+          const registration = (await sidecar.callTool("starknet_register_agent", {
+            ...(config.agentTokenUri ? { token_uri: config.agentTokenUri } : {}),
+          })) as Record<string, unknown>;
+
+          let agentId = asNonEmptyString(registration.agentId);
+          const transactionHash = asNonEmptyString(registration.transactionHash);
+
+          if (!agentId && transactionHash && config.identityRegistryAddress) {
+            const receipt = await fetchReceipt(config.rpcUrl, transactionHash);
+            agentId = parseRegisteredAgentIdFromReceipt(receipt, config.identityRegistryAddress);
+          }
+
+          if (!agentId) {
+            throw new Error(
+              "ERC-8004 registration completed but agentId could not be resolved. Set DEMO_AGENT_ID explicitly.",
+            );
+          }
+
+          resolvedAgentId = agentId;
+          return {
+            agentId,
+            transactionHash: transactionHash ?? null,
+            tokenUri: config.agentTokenUri ?? null,
+          };
+        }),
+      );
+    }
+  }
+
+  if (resolvedAgentId) {
     if (!hasTool(tools, "starknet_get_agent_metadata")) {
       steps.push(
         skippedStep(
@@ -245,10 +349,10 @@ async function main(): Promise<void> {
       steps.push(
         await runStep("erc8004_identity", "Read ERC-8004 agent metadata", async () => {
           const metadata = await sidecar.callTool("starknet_get_agent_metadata", {
-            agent_id: config.agentId,
+            agent_id: resolvedAgentId,
             key: "agentWallet",
           });
-          return { agentId: config.agentId, metadata };
+          return { agentId: resolvedAgentId, metadata };
         }),
       );
     }
@@ -257,9 +361,67 @@ async function main(): Promise<void> {
       skippedStep(
         "erc8004_identity",
         "Read ERC-8004 agent metadata",
-        "Set DEMO_AGENT_ID to include identity evidence in artifact",
+        "Set DEMO_AGENT_ID or DEMO_AUTO_REGISTER_AGENT=1 to include identity evidence in artifact",
       ),
     );
+  }
+
+  if (config.anchorBaseToErc8004) {
+    if (!baseAttestation) {
+      steps.push(
+        skippedStep(
+          "base_attestation_anchor",
+          "Anchor Base attestation hash on ERC-8004 metadata",
+          "DEMO_BASE_ATTESTATION_PATH is required when DEMO_ANCHOR_BASE_TO_ERC8004=1",
+        ),
+      );
+    } else if (!resolvedAgentId) {
+      steps.push(
+        skippedStep(
+          "base_attestation_anchor",
+          "Anchor Base attestation hash on ERC-8004 metadata",
+          "Missing agent id. Set DEMO_AGENT_ID or DEMO_AUTO_REGISTER_AGENT=1",
+        ),
+      );
+    } else if (!hasTool(tools, "starknet_set_agent_metadata") || !hasTool(tools, "starknet_get_agent_metadata")) {
+      steps.push(
+        skippedStep(
+          "base_attestation_anchor",
+          "Anchor Base attestation hash on ERC-8004 metadata",
+          "Required metadata tools are not exposed by MCP server",
+        ),
+      );
+    } else {
+      steps.push(
+        await runStep("base_attestation_anchor", "Anchor Base attestation hash on ERC-8004 metadata", async () => {
+          const key = config.baseAnchorMetadataKey;
+          const value = baseAttestation.sha256;
+
+          const setResult = (await sidecar.callTool("starknet_set_agent_metadata", {
+            agent_id: resolvedAgentId,
+            key,
+            value,
+          })) as Record<string, unknown>;
+          const getResult = (await sidecar.callTool("starknet_get_agent_metadata", {
+            agent_id: resolvedAgentId,
+            key,
+          })) as Record<string, unknown>;
+
+          const readBack = asNonEmptyString(getResult.value) ?? "";
+          if (readBack !== value) {
+            throw new Error(`Anchored value mismatch for key ${key}: expected ${value}, got ${readBack || "<empty>"}`);
+          }
+
+          return {
+            agentId: resolvedAgentId,
+            key,
+            value,
+            transactionHash: asNonEmptyString(setResult.transactionHash) ?? null,
+            readBack,
+          };
+        }),
+      );
+    }
   }
 
   let sessionState: SessionState | undefined;

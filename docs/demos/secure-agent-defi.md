@@ -115,3 +115,13 @@ Key transaction evidence (Starknet Sepolia):
 5. Session revocation transaction succeeded:
    - `0x43c34a21cf30e5b187ef1b2e4c56157cf3c7d1672ac5899b5b82caabb33e6e9` (`SUCCEEDED`)
    - Subsequent action attempt in same run was blocked by account validation (`validate` returned `0x0`), recorded in run log.
+
+v1.1 full-proof additions (same day):
+
+1. ERC-8004 registration succeeded:
+   - `0x14c24c1d2784ce94f25b7a89592276e8fe62563fb8c95ead4dcbed52a466b8` (`SUCCEEDED`)
+   - resolved `agentId = 178`
+2. Base attestation hash anchor (ERC-8004 metadata set + verified readback):
+   - `0x358a907147409db6a0d21fbd3b37f4c4c518c6ae35fcc3bcf372835acd106be` (`SUCCEEDED`)
+3. Starkzap-path transfer evidence:
+   - `0x3038127239416ed2afc3f6bfa2c1c64ab7bbee4e9a525df88828ebcf942232b` (`SUCCEEDED`)
