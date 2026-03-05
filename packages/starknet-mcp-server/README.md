@@ -33,6 +33,8 @@ STARKNET_PRIVATE_KEY=0x...
 # avnu URLs (optional -- defaults shown)
 AVNU_BASE_URL=https://starknet.api.avnu.fi
 AVNU_PAYMASTER_URL=https://starknet.paymaster.avnu.fi
+# Optional for Vesu on non-mainnet deployments (e.g. Sepolia V2):
+# STARKNET_VESU_POOL_FACTORY=0x...
 #
 # Paymaster fee mode:
 # - sponsored: dApp pays gas (requires AVNU to authorize your API key for sponsored builds)
