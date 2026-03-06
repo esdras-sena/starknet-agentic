@@ -21,6 +21,9 @@ import { findCanonicalAction, ALL_SYNONYMS } from './synonyms.js';
 import { resolveRpcUrl } from './_rpc.js';
 import { fetchVerifiedTokens } from './_tokens.js';
 
+const AVNU_VIRTUAL_SENTINELS = new Set(['__avnu_virtual__', '0x01']);
+const VESU_VIRTUAL_SENTINELS = new Set(['__vesu_virtual__', '0x02']);
+
 // ============ LOOT SURVIVOR LATEST ADVENTURER (LOCAL UX STATE) ============
 // We intentionally do NOT scan chain/indexers for "latest adventurer".
 // Instead we persist the last-used adventurerId per account locally.
@@ -741,14 +744,14 @@ async function main() {
       for (let i = 0; i < operations.length; i++) {
         const op = operations[i];
         
-        // Check if this is an AVNU operation (protocol "AVNU" or address "0x01")
+        // Check if this is an AVNU/VESU virtual protocol operation
         const isAvnu = op.protocol?.toLowerCase() === "avnu" || 
-                      addresses[op.protocol] === "0x01" ||
-                      op.contractAddress === "0x01";
+                      AVNU_VIRTUAL_SENTINELS.has(String(addresses[op.protocol] || '')) ||
+                      AVNU_VIRTUAL_SENTINELS.has(String(op.contractAddress || ''));
 
         const isVesu = op.protocol?.toLowerCase() === "vesu" ||
-                      addresses[op.protocol] === "0x02" ||
-                      op.contractAddress === "0x02";
+                      VESU_VIRTUAL_SENTINELS.has(String(addresses[op.protocol] || '')) ||
+                      VESU_VIRTUAL_SENTINELS.has(String(op.contractAddress || ''));
         
         if (isAvnu) {
           // AVNU swap via SDK
@@ -1099,14 +1102,13 @@ async function main() {
           // Add action if it's a conditional (not pure watch)
           if (operationType === "CONDITIONAL" && w.action && w.action !== "watch") {
             // Determine action script based on protocol/action
-            // AVNU is identified by: protocol name "AVNU" OR special address "0x01"
             const isAvnu = w.protocol?.toLowerCase() === "avnu" || 
-                          addresses[w.protocol] === "0x01" ||
-                          w.contractAddress === "0x01";
+                          AVNU_VIRTUAL_SENTINELS.has(String(addresses[w.protocol] || '')) ||
+                          AVNU_VIRTUAL_SENTINELS.has(String(w.contractAddress || ''));
 
             const isVesu = w.protocol?.toLowerCase() === "vesu" ||
-                          addresses[w.protocol] === "0x02" ||
-                          w.contractAddress === "0x02";
+                          VESU_VIRTUAL_SENTINELS.has(String(addresses[w.protocol] || '')) ||
+                          VESU_VIRTUAL_SENTINELS.has(String(w.contractAddress || ''));
             
             if (isAvnu) {
               watcherConfig.action = {

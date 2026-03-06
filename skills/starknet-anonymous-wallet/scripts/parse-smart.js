@@ -650,17 +650,17 @@ async function main() {
   const addresses = {};
   
   for (const protocol of protocols) {
-    // AVNU gets fake ABI and address so LLM treats it like any protocol
+    // AVNU gets fake ABI and non-address sentinel so LLM treats it like any protocol
     if (protocol.toLowerCase() === 'avnu') {
-      addresses[protocol] = '0x01';  // Special marker address
-      abis[protocol] = ['swap'];     // Single function ABI
+      addresses[protocol] = '__avnu_virtual__';
+      abis[protocol] = ['swap'];
       continue;
     }
 
-    // VESU gets fake ABI and address so LLM treats it like any protocol
+    // VESU gets fake ABI and non-address sentinel so LLM treats it like any protocol
     // Actual execution is routed to scripts/vesu-pool.js which calls Pool.modify_position.
     if (protocol.toLowerCase() === 'vesu') {
-      addresses[protocol] = '0x02';
+      addresses[protocol] = '__vesu_virtual__';
       abis[protocol] = ['supply', 'borrow', 'position'];
       continue;
     }
