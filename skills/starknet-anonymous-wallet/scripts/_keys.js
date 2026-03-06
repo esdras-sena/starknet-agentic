@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join, isAbsolute } from 'node:path';
+import { join, isAbsolute, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
 
 export function getSecretsDir() {
@@ -32,8 +32,14 @@ export function loadPrivateKeyByAccountAddress(accountAddress) {
       ? data.privateKeyPath
       : join(dir, data.privateKeyPath);
 
-    if (!existsSync(keyPath)) throw new Error(`Private key file not found: ${keyPath}`);
-    const privateKey = readFileSync(keyPath, 'utf8').trim();
+    const resolved = resolve(keyPath);
+    const base = resolve(dir);
+    if (!(resolved === base || resolved.startsWith(base + sep))) {
+      throw new Error('privateKeyPath must resolve within the secrets directory');
+    }
+
+    if (!existsSync(resolved)) throw new Error(`Private key file not found: ${resolved}`);
+    const privateKey = readFileSync(resolved, 'utf8').trim();
     if (!privateKey) throw new Error('Private key file is empty.');
     return privateKey;
   }
