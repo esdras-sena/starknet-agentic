@@ -1062,10 +1062,12 @@ async function main() {
             const durationMs = tc.unit?.startsWith('minute') ? tc.amount * 60 * 1000 :
                               tc.unit?.startsWith('hour') ? tc.amount * 60 * 60 * 1000 :
                               tc.amount * 1000; // default to seconds
-            
+            const eventName = String(w.condition?.eventName || w.eventName || 'event').toLowerCase();
+            const scheduleProtocol = String(watchProtocol || 'watch').toLowerCase();
+
             watcherConfig.args.schedule = {
               enabled: true,
-              name: `${watchProtocol.toLowerCase()}-${w.condition.eventName.toLowerCase()}-monitor`,
+              name: `${scheduleProtocol}-${eventName}-monitor`,
               durationMs: durationMs
             };
           }
