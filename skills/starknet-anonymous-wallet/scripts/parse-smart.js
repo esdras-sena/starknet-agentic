@@ -26,7 +26,7 @@
 
 import { RpcProvider } from 'starknet';
 import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from 'fs';
-import { join, dirname, resolve as resolvePath } from 'path';
+import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
 import crypto from 'crypto';
@@ -46,10 +46,6 @@ const SKILL_ROOT = join(__dirname, '..');
 const ATTEST_DIR = join(homedir(), '.openclaw', 'typhoon-attest');
 const ATTEST_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const MIN_RECIPIENT_HEX_LEN = 10;
-const PROTOCOL_VIRTUAL_ADDRESSES = Object.freeze({
-  AVNU: '__avnu_virtual__',
-  VESU: '__vesu_virtual__'
-});
 
 function attestIssue() {
   // Use random bytes; do NOT derive from secrets.
@@ -61,7 +57,8 @@ function attestIssue() {
     writeFileSync(p, JSON.stringify({ createdAt: now, expiresAt: now + ATTEST_TTL_MS }), 'utf8');
   } catch (err) {
     // If we can't write, still return token; resolve will fail closed.
-    console.error(`Failed to write attestation file in ${ATTEST_DIR}: ${err.message}`);
+    // Never log token values.
+    console.error(`Failed to write attestation in ${ATTEST_DIR}: ${err.message}`);
   }
   return token;
 }
@@ -142,17 +139,6 @@ function loadProtocols() {
   return protocols;
 }
 
-async function isContractDeployed(address) {
-  try {
-    const rpcUrl = resolveRpcUrl();
-    const provider = new RpcProvider({ nodeUrl: rpcUrl });
-    await provider.getClassHashAt(address);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 // ============ SECURITY VALIDATION ============
 function validatePromptSecurity(prompt) {
   // Use vard.safe() for basic validation
@@ -188,7 +174,7 @@ function validatePromptSecurity(prompt) {
     { pattern: /\b(friend\s+said|prior\s+message|you\s+promised)\b.{0,80}\b(reveal|print|show|secrets?|keys?)\b/i, threat: 'instruction_override' },
     { pattern: /\b(do\s+it\s+now|just\s+do\s+it)\b/i, threat: 'auth_bypass' },
     { pattern: /\bdon[’']t\s+warn\b/i, threat: 'instruction_override' },
-    { pattern: /(?:\bcode\s*block\b|```|\[send\b)/i, threat: 'instruction_override' },
+    { pattern: /\b(code\s*block|```|\[send\b)\b/i, threat: 'instruction_override' },
     { pattern: /\b(base64|rot13|atob|btoa)\b/i, threat: 'obfuscation' },
 
     // Attempts to access local files / secrets / logs
@@ -203,7 +189,6 @@ function validatePromptSecurity(prompt) {
     { pattern: /p-r-i-v-a-t-e\s*key/i, threat: 'key_exposure' },
     { pattern: /pr\\u0069vate\s*key/i, threat: 'key_exposure' },
     { pattern: /prıvate\s*key/i, threat: 'key_exposure' },
-    { pattern: /^(?=.{32,}$)(?:[A-Za-z0-9+/]{4})+(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/m, threat: 'obfuscation' },
 
     // Social-engineering patterns to bypass confirmation
     { pattern: /\b(skip|bypass|without)\b.{0,40}\b(confirmation|confirm|authorization|approval|asking)\b/i, threat: 'auth_bypass' },
@@ -224,7 +209,7 @@ function validatePromptSecurity(prompt) {
 
     { pattern: /\bthen\s+(run|execute)\b\s*:/i, threat: 'command_injection' },
     { pattern: /\b(openclaw|crontab|curl|wget)\b/i, threat: 'tool_invocation' },
-    { pattern: /(?:&&|\|\||;|`|\$\()/, threat: 'shell_metachar' },
+    { pattern: /[;&|]{1,2}/, threat: 'shell_metachar' },
 
     // Structured payload injection
     { pattern: /"parsed"\s*:/i, threat: 'structured_injection' },
@@ -241,6 +226,13 @@ function validatePromptSecurity(prompt) {
     if (pattern.test(prompt)) {
       threats.push(threat);
     }
+  }
+
+  // Context-aware base64 obfuscation detection (reduces false positives)
+  const hasBase64Context = /\b(base64|atob|btoa|decode|encoded|payload)\b/i.test(prompt);
+  const base64Candidates = prompt.match(/\b[A-Za-z0-9+/]{64,}={0,2}\b/g) || [];
+  if (hasBase64Context && base64Candidates.length > 0) {
+    threats.push('obfuscation');
   }
   
   if (threats.length > 0) {
@@ -327,21 +319,6 @@ function extractTokensAndProtocols(prompt, availableTokens, knownProtocols) {
   return { tokens: foundTokens, protocols: foundProtocols };
 }
 
-function extractProtocolMentions(prompt) {
-  const stopwords = new Set([
-    'a', 'an', 'the', 'this', 'that', 'these', 'those',
-    'my', 'your', 'our', 'their', 'of', 'to', 'for', 'with', 'by', 'from', 'about', 'as'
-  ]);
-  const found = [];
-  const regex = /\b(?:at|on|via|in)\s+([A-Za-z][A-Za-z0-9_-]{1,63})\b/gi;
-  for (const match of prompt.matchAll(regex)) {
-    if (match[1] && !stopwords.has(String(match[1]).toLowerCase())) {
-      found.push(match[1]);
-    }
-  }
-  return found;
-}
-
 // ============ MAIN ============
 async function main() {
   const rawInput = process.argv[2];
@@ -415,6 +392,7 @@ async function main() {
   // If user is asking to create an account, just return instructions.
   if (isAccountCreationPrompt(prompt)) {
     const hasAcct = hasAnyAccount();
+    const guide = buildNoAccountGuide();
     console.log(JSON.stringify({
       success: true,
       security,
@@ -422,7 +400,9 @@ async function main() {
       canProceed: false,
       operationType: "CREATE_ACCOUNT_INTENT",
       hasAccount: hasAcct,
-      noAccountGuide: buildNoAccountGuide(),
+      noAccountGuide: guide,
+      steps: guide.steps,
+      stepsText: guide.steps.map(s => `${s.step}. ${s.title}${s.url ? ` — ${s.url}` : ''}${s.description ? ` — ${s.description}` : ''}`),
       nextStep: hasAcct ? "ACCOUNT_ALREADY_EXISTS" : "CREATE_ACCOUNT_REQUIRED",
       message: hasAcct
         ? "Account already exists. You can ask for your address or start sending transactions."
@@ -433,7 +413,7 @@ async function main() {
   
   // Step 2: Handle registration if provided
   if (register) {
-    const { type, name, address, force = false } = register;
+    const { type, name, address } = register;
     
     if (type === 'protocol') {
       if (!name || !/^[A-Za-z0-9_-]{2,64}$/.test(name)) {
@@ -450,17 +430,6 @@ async function main() {
           error: "Invalid protocol address format (expected 0x-prefixed hex)"
         }));
         process.exit(1);
-      }
-      if (!force) {
-        const deployed = await isContractDeployed(address);
-        if (!deployed) {
-          console.log(JSON.stringify({
-            success: false,
-            error: "Protocol address is not deployed on the configured network RPC",
-            hint: "Set register.force=true to bypass this check if you are registering ahead of deployment"
-          }));
-          process.exit(1);
-        }
       }
       
       const registry = loadRegistry('protocols.json');
@@ -483,6 +452,7 @@ async function main() {
   // Step 2.5: Account presence check
   // parse-smart must not proceed to ABI fetching/LLM parsing if no account exists.
   if (!hasAnyAccount()) {
+    const guide = buildNoAccountGuide();
     console.log(JSON.stringify({
       success: true,
       security,
@@ -490,7 +460,9 @@ async function main() {
       canProceed: false,
       needsAccount: true,
       operationType: "NO_ACCOUNT",
-      noAccountGuide: buildNoAccountGuide(),
+      noAccountGuide: guide,
+      steps: guide.steps,
+      stepsText: guide.steps.map(s => `${s.step}. ${s.title}${s.url ? ` — ${s.url}` : ''}${s.description ? ` — ${s.description}` : ''}`),
       nextStep: "CREATE_ACCOUNT_REQUIRED"
     }));
     return;
@@ -536,9 +508,8 @@ async function main() {
     const looksHexButTooShort = !!(toCandidate && /^0x[0-9a-fA-F]+$/.test(toCandidate) && toCandidate.length < (2 + MIN_RECIPIENT_HEX_LEN));
     const hasInvalidRecipient = !!(toCandidate && (!exactRecipientRegex.test(toCandidate) || looksHexButTooShort));
 
-    // Amount: first decimal/integer number (exclude 0x... address segments)
-    const promptWithoutHex = prompt.replace(/0x[0-9a-fA-F]+/g, ' ');
-    const amountMatch = promptWithoutHex.match(/\b\d+(?:\.\d+)?\b/);
+    // Amount: first decimal/integer number
+    const amountMatch = prompt.match(/\b\d+(?:\.\d+)?\b/);
     const amount = amountMatch ? amountMatch[0] : null;
 
     // Token: from extracted tokens; fallback to uppercase word heuristic
@@ -602,30 +573,25 @@ async function main() {
     }
   }
   
-  // Step 5: Handle virtual protocols with fake ABI/address.
+  // Step 5: Handle AVNU - treat as normal protocol with fake ABI/address
   const hasAvnuExplicit = protocols.some(p => p.toLowerCase() === 'avnu') ||
                           prompt.toLowerCase().includes('avnu');
-  const hasVesuExplicit = protocols.some(p => p.toLowerCase() === 'vesu') ||
-                          /\bvesu\b/i.test(prompt);
-
-  // Add virtual protocols to the list if explicitly mentioned.
+  
+  // Add AVNU to protocols list if mentioned
   if (hasAvnuExplicit && !protocols.includes('AVNU')) {
     protocols.push('AVNU');
   }
-  if (hasVesuExplicit && !protocols.includes('VESU')) {
-    protocols.push('VESU');
-  }
-
-  // Step 6: Check for unregistered protocols (virtual protocols are treated as registered)
-  const mentionedProtocolCandidates = [
-    ...new Set([...protocols, ...extractProtocolMentions(prompt)])
-  ];
-  const builtInVirtualProtocols = new Set(
-    Object.keys(PROTOCOL_VIRTUAL_ADDRESSES).map((p) => p.toLowerCase())
+  
+  // Step 6: Check for unregistered protocols (AVNU is now treated as registered)
+  const mentionedProtocols = extractTokensAndProtocols(
+    prompt,
+    [],
+    prompt.toLowerCase().match(/\b(?:at|on|via|in)\s+([A-Za-z]+)/gi)?.map(m => m.split(/\s+/)[1]) || []
   );
-
-  const unregistered = mentionedProtocolCandidates.filter(p => {
-    if (builtInVirtualProtocols.has(p.toLowerCase())) return false;
+  
+  const unregistered = mentionedProtocols.protocols.filter(p => {
+    // Skip AVNU - it's treated as a special but registered protocol
+    if (p.toLowerCase() === 'avnu') return false;
     return !knownProtocols.some(kp => kp.toLowerCase() === p.toLowerCase());
   });
   
@@ -661,15 +627,15 @@ async function main() {
   for (const protocol of protocols) {
     // AVNU gets fake ABI and address so LLM treats it like any protocol
     if (protocol.toLowerCase() === 'avnu') {
-      addresses[protocol] = PROTOCOL_VIRTUAL_ADDRESSES.AVNU;
-      abis[protocol] = ['swap', 'quote', 'dca', 'stake', 'unstake', 'gasless', 'gasfree'];
+      addresses[protocol] = '0x01';  // Special marker address
+      abis[protocol] = ['swap'];     // Single function ABI
       continue;
     }
 
     // VESU gets fake ABI and address so LLM treats it like any protocol
     // Actual execution is routed to scripts/vesu-pool.js which calls Pool.modify_position.
     if (protocol.toLowerCase() === 'vesu') {
-      addresses[protocol] = PROTOCOL_VIRTUAL_ADDRESSES.VESU;
+      addresses[protocol] = '0x02';
       abis[protocol] = ['supply', 'borrow', 'position'];
       continue;
     }
@@ -705,8 +671,7 @@ async function main() {
   }));
 }
 
-const __entryFile = process.argv[1] ? resolvePath(process.argv[1]) : null;
-if (__entryFile && fileURLToPath(import.meta.url) === __entryFile) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch(err => {
     console.log(JSON.stringify({
       success: false,
