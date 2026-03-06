@@ -672,7 +672,15 @@ async function main() {
     rawInput = readFileSync(configPath, 'utf8');
   }
   
-  const config = JSON.parse(rawInput);
+  let config;
+  try {
+    config = JSON.parse(rawInput);
+  } catch (err) {
+    const source = configPath ? `config file ${configPath}` : 'input argument';
+    console.error(JSON.stringify({ error: `Invalid JSON in ${source}: ${err.message}` }));
+    process.exit(1);
+  }
+
   // Remember config path/job name when started from cron
   if (configPath) {
     config.__configPath = configPath;
