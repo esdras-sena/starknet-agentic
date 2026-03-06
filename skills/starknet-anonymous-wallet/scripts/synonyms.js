@@ -75,7 +75,9 @@ export function buildReverseMap(synonymMap) {
   for (const [canonical, variants] of Object.entries(synonymMap)) {
     reverse[canonical.toLowerCase()] = canonical;
     for (const variant of variants) {
-      reverse[variant.toLowerCase()] = canonical;
+      const key = variant.toLowerCase();
+      if (reverse[key] !== undefined) continue;
+      reverse[key] = canonical;
     }
   }
   return reverse;
