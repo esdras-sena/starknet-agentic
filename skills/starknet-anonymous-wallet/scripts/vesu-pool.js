@@ -488,7 +488,7 @@ async function main() {
   }
 
   // Amounts (execution path)
-  const collateralAmountHuman = action === 'borrow' ? input.collateralAmount : input.amount;
+  const collateralAmountHuman = input.collateralAmount ?? input.amount;
   const debtAmountHuman = action === 'borrow' ? input.debtAmount : '0';
 
   if (!collateralAmountHuman) {
