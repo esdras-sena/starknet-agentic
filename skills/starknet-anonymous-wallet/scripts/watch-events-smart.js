@@ -628,11 +628,10 @@ class SmartEventWatcher {
 
         log('Health check: Attempting WebSocket recovery...');
         this.wsReconnectAttempts = 0;
-        this.stopPolling();
         this.tryWebSocket().then(success => {
-          if (!success) {
-            // Recovery failed, continue polling
-            this.startPolling();
+          if (success) {
+            // Stop polling only after WebSocket is confirmed live
+            this.stopPolling();
           }
         });
       }
