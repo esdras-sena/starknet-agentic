@@ -26,7 +26,7 @@ This skill provides **agent-facing scripts** for:
 ## Prerequisites
 
 ```bash
-npm install starknet@^9.2.1 typhoon-sdk@^1.1.13 @andersmyrmel/vard@^1.2.0 @avnu/avnu-sdk compromise@^14.14.5 ws@^8.19.0
+npm install starknet@^8.9.1 typhoon-sdk@^1.1.13 @andersmyrmel/vard@^1.2.0 @avnu/avnu-sdk compromise@^14.14.5 ws@^8.19.0
 ```
 
 ### RPC setup (required for onchain reads/writes)
@@ -39,7 +39,7 @@ These scripts talk to Starknet via JSON-RPC. Configure one of:
 If neither is provided, scripts fall back to the public Lava mainnet RPC:
 - `https://rpc.starknet.lava.build:443`
 
-## Starknet.js v9.2.1 quick patterns
+## Starknet.js v8.9.1 quick patterns
 
 ```js
 import { RpcProvider, Account, Contract } from 'starknet';
