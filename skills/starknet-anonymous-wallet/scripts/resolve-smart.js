@@ -15,7 +15,6 @@ import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync, mkdir
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
-import { spawn } from 'child_process';
 import { findCanonicalAction, ALL_SYNONYMS } from './synonyms.js';
 
 import { resolveRpcUrl } from './_rpc.js';
@@ -1199,71 +1198,6 @@ async function main() {
     hint: "Run parse-smart + LLM parsing first, then pass { parsed: {...} }"
   }));
   process.exit(1);
-}
-
-// Wait for user authorization from stdin
-async function waitForAuthorization(skipAuth = false) {
-  if (skipAuth) return true;
-  
-  return new Promise((resolve) => {
-    let input = '';
-    
-    process.stdin.setEncoding('utf8');
-    process.stdin.resume();
-    
-    process.stdin.on('data', (chunk) => {
-      input += chunk;
-      const trimmed = input.trim().toLowerCase();
-      
-      if (trimmed === 'yes' || trimmed === 'y') {
-        process.stdin.pause();
-        resolve(true);
-      } else if (trimmed === 'no' || trimmed === 'n' || trimmed === 'cancel') {
-        process.stdin.pause();
-        resolve(false);
-      }
-    });
-    
-    // Timeout after 5 minutes
-    setTimeout(() => {
-      process.stdin.pause();
-      resolve(false);
-    }, 300000);
-  });
-}
-
-// Execute a child script and return parsed JSON result
-async function executeScript(scriptPath, args) {
-  return new Promise((resolve, reject) => {
-    const child = spawn('node', [scriptPath, JSON.stringify(args)], {
-      cwd: __dirname,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: process.env
-    });
-    
-    let stdout = '';
-    let stderr = '';
-    
-    child.stdout.on('data', (data) => { stdout += data; });
-    child.stderr.on('data', (data) => { stderr += data; });
-    
-    child.on('close', (code) => {
-      try {
-        const result = JSON.parse(stdout.trim());
-        resolve(result);
-      } catch (e) {
-        if (code !== 0) {
-          reject(new Error(stderr || `Script exited with code ${code}`));
-        } else {
-          reject(new Error(`Failed to parse script output: ${stdout}`));
-        }
-      }
-    });
-    
-    child.on('error', (err) => {
-      reject(err);
-    });
-  });
 }
 
 main().catch(err => {
