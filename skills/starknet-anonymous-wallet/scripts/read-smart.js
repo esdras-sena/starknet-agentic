@@ -267,7 +267,11 @@ async function main() {
       result = rawResult;
     }
 
-    if (!rawResult) {
+    const rawCalldata = callArgs.every((v) =>
+      v !== null && v !== undefined && (typeof v === 'string' || typeof v === 'number' || typeof v === 'bigint' || typeof v === 'boolean')
+    );
+
+    if (!rawResult && rawCalldata && isUint256LikeOutput(matchedFunction)) {
       try {
         const r = await provider.callContract({
           contractAddress,
