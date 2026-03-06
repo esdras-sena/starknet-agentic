@@ -206,14 +206,18 @@ class SmartEventWatcher {
     this.lastLoggedMinute = null;
   }
 
+  log(message, type = 'info') {
+    log(message, type, this.currentMode);
+  }
+
   async start() {
-    log('Starting smart event watcher...');
-    log(`Contract: ${this.contractAddress}`);
-    log(`Events: ${this.eventNames.join(', ')}`);
-    log(`Mode preference: ${this.forcedMode}`);
+    this.log('Starting smart event watcher...');
+    this.log(`Contract: ${this.contractAddress}`);
+    this.log(`Events: ${this.eventNames.join(', ')}`);
+    this.log(`Mode preference: ${this.forcedMode}`);
     
     if (this.durationMs) {
-      log(`Duration: ${this.durationMs}ms (${this.durationMs / 1000 / 60} minutes)`);
+      this.log(`Duration: ${this.durationMs}ms (${this.durationMs / 1000 / 60} minutes)`);
       this.startTTLCheck();
     }
 
@@ -237,13 +241,13 @@ class SmartEventWatcher {
       const remaining = this.durationMs - elapsed;
       
       if (remaining <= 0) {
-        log(`TTL expired after ${this.durationMs}ms. Self-destructing...`, 'info');
+        this.log(`TTL expired after ${this.durationMs}ms. Self-destructing...`, 'info');
         this.selfDestruct();
       } else {
         const currentMinute = Math.ceil(remaining / 1000 / 60);
         if (currentMinute !== this.lastLoggedMinute) {
           this.lastLoggedMinute = currentMinute;
-          log(`TTL: ${currentMinute} minutes remaining`, 'info');
+          this.log(`TTL: ${currentMinute} minutes remaining`, 'info');
         }
       }
     }, 1000); // Check every second
@@ -251,7 +255,7 @@ class SmartEventWatcher {
   
   // Self-destruct: stop watching and remove cron job
   async selfDestruct() {
-    log('Executing self-destruct sequence...', 'info');
+    this.log('Executing self-destruct sequence...', 'info');
     
     // Stop all timers
     if (this.ttlTimer) {
@@ -286,13 +290,13 @@ class SmartEventWatcher {
         const tmpCrontab = join(tmpdir(), `crontab-${process.pid}.tmp`);
         writeFileSync(tmpCrontab, newCrontab);
         execFileSync('crontab', [tmpCrontab]);
-        try { unlinkSync(tmpCrontab); } catch (e) { log(`Failed to remove temp crontab (${tmpCrontab}): ${e}`, 'warn'); }
+        try { unlinkSync(tmpCrontab); } catch (e) { this.log(`Failed to remove temp crontab (${tmpCrontab}): ${e}`, 'warn'); }
 
         // Delete files
-        try { unlinkSync(shellPath); } catch (e) { log(`Failed to remove shellPath (${shellPath}): ${e}`, 'warn'); }
-        try { unlinkSync(configPath); } catch (e) { log(`Failed to remove configPath (${configPath}): ${e}`, 'warn'); }
+        try { unlinkSync(shellPath); } catch (e) { this.log(`Failed to remove shellPath (${shellPath}): ${e}`, 'warn'); }
+        try { unlinkSync(configPath); } catch (e) { this.log(`Failed to remove configPath (${configPath}): ${e}`, 'warn'); }
 
-        log(`Removed cron job: ${jobName}`, 'info');
+        this.log(`Removed cron job: ${jobName}`, 'info');
         removed = true;
       }
 
@@ -313,13 +317,13 @@ class SmartEventWatcher {
             const tmpCrontab = join(tmpdir(), `crontab-${process.pid}-2.tmp`);
             writeFileSync(tmpCrontab, newCrontab);
             execFileSync('crontab', [tmpCrontab]);
-            try { unlinkSync(tmpCrontab); } catch (e) { log(`Failed to remove temp crontab (${tmpCrontab}): ${e}`, 'warn'); }
+            try { unlinkSync(tmpCrontab); } catch (e) { this.log(`Failed to remove temp crontab (${tmpCrontab}): ${e}`, 'warn'); }
 
-            try { unlinkSync(shellPath); } catch (e) { log(`Failed to remove shellPath (${shellPath}): ${e}`, 'warn'); }
+            try { unlinkSync(shellPath); } catch (e) { this.log(`Failed to remove shellPath (${shellPath}): ${e}`, 'warn'); }
             const derivedConfigPath = shellPath.replace(/\.sh$/i, '.json');
-            try { unlinkSync(derivedConfigPath); } catch (e) { log(`Failed to remove configPath (${derivedConfigPath}): ${e}`, 'warn'); }
+            try { unlinkSync(derivedConfigPath); } catch (e) { this.log(`Failed to remove configPath (${derivedConfigPath}): ${e}`, 'warn'); }
 
-            log(`Removed cron job: ${file}`, 'info');
+            this.log(`Removed cron job: ${file}`, 'info');
             removed = true;
             break;
           }
@@ -327,13 +331,13 @@ class SmartEventWatcher {
       }
 
       if (!removed) {
-        log('No cron job found to remove (may have been manual run)', 'warn');
+        this.log('No cron job found to remove (may have been manual run)', 'warn');
       }
     } catch (err) {
-      log(`Error during self-destruct cleanup: ${err.message}`, 'error');
+      this.log(`Error during self-destruct cleanup: ${err.message}`, 'error');
     }
     
-    log('Self-destruct complete. Exiting.', 'info');
+    this.log('Self-destruct complete. Exiting.', 'info');
     process.exit(0);
   }
 
@@ -341,7 +345,7 @@ class SmartEventWatcher {
   async tryWebSocket() {
     if (this.isShuttingDown) return;
     
-    log('Attempting WebSocket connection...');
+    this.log('Attempting WebSocket connection...');
 
     return new Promise((resolve) => {
       let connected = false;
@@ -350,7 +354,7 @@ class SmartEventWatcher {
       
       const connectionTimeout = setTimeout(() => {
         if (!connected) {
-          log('WebSocket connection timeout', 'warn');
+          this.log('WebSocket connection timeout', 'warn');
           this.ws.close();
           this.handleWebSocketFailure('timeout');
           resolve(false);
@@ -363,7 +367,7 @@ class SmartEventWatcher {
         this.currentMode = 'websocket';
         this.wsIsConnected = true;
         this.wsReconnectAttempts = 0;
-        log('WebSocket connected successfully');
+        this.log('WebSocket connected successfully');
         
         // Subscribe to events
         if (this.eventNames.length === 0) {
@@ -401,7 +405,7 @@ class SmartEventWatcher {
           
           // Handle subscription confirmation
           if (msg.result !== undefined && typeof msg.result === 'number') {
-            log(`Subscribed with ID: ${msg.result}`);
+            this.log(`Subscribed with ID: ${msg.result}`);
             return;
           }
           
@@ -409,7 +413,7 @@ class SmartEventWatcher {
           if (msg.error || msg.Error_Received) {
             const errorStr = JSON.stringify(msg.error || msg.Error_Received).toLowerCase();
             if (errorStr.includes('unsupported') || errorStr.includes('not found')) {
-              log('WebSocket: Subscriptions not supported by provider', 'warn');
+              this.log('WebSocket: Subscriptions not supported by provider', 'warn');
               this.handleWebSocketFailure('unsupported');
               resolve(false);
               return;
@@ -423,7 +427,7 @@ class SmartEventWatcher {
           }
         } catch (e) {
           if (process.env.OPENCLAW_DEBUG === '1') {
-            log(`WebSocket message parse error: ${e.message}`, 'debug');
+            this.log(`WebSocket message parse error: ${e.message}`, 'debug');
           }
         }
       });
@@ -431,7 +435,7 @@ class SmartEventWatcher {
       this.ws.on('error', (err) => {
         if (!connected) {
           clearTimeout(connectionTimeout);
-          log(`WebSocket error: ${err.message}`, 'error');
+          this.log(`WebSocket error: ${err.message}`, 'error');
           this.handleWebSocketFailure('error');
           resolve(false);
         }
@@ -440,7 +444,7 @@ class SmartEventWatcher {
       this.ws.on('close', () => {
         this.wsIsConnected = false;
         if (this.currentMode === 'websocket' && !this.isShuttingDown) {
-          log('WebSocket disconnected unexpectedly', 'warn');
+          this.log('WebSocket disconnected unexpectedly', 'warn');
           this.handleWebSocketFailure('disconnected');
         }
       });
@@ -456,15 +460,15 @@ class SmartEventWatcher {
       // In forced WebSocket mode, keep retrying
       if (this.wsReconnectAttempts < this.maxWsReconnectAttempts) {
         const delay = Math.min(30000, 2000 * Math.pow(2, this.wsReconnectAttempts));
-        log(`WebSocket retry ${this.wsReconnectAttempts}/${this.maxWsReconnectAttempts} in ${delay}ms...`);
+        this.log(`WebSocket retry ${this.wsReconnectAttempts}/${this.maxWsReconnectAttempts} in ${delay}ms...`);
         setTimeout(() => this.tryWebSocket(), delay);
       } else {
-        log('Max WebSocket reconnection attempts reached', 'error');
+        this.log('Max WebSocket reconnection attempts reached', 'error');
         process.exit(1);
       }
     } else {
       // In auto mode, fallback to polling
-      log(`WebSocket failed (${reason}), switching to polling mode`);
+      this.log(`WebSocket failed (${reason}), switching to polling mode`);
       this.stopWebSocket();
       this.startPolling();
     }
@@ -485,16 +489,16 @@ class SmartEventWatcher {
     
     this.currentMode = 'polling';
     this.isPolling = true;
-    log('Starting HTTP polling mode...');
-    log(`Poll interval: ${this.pollIntervalMs}ms`);
+    this.log('Starting HTTP polling mode...');
+    this.log(`Poll interval: ${this.pollIntervalMs}ms`);
 
     // Get starting block
     try {
       const block = await this.provider.getBlock('latest');
       this.currentBlock = block.block_number;
-      log(`Starting from block ${this.currentBlock}`);
+      this.log(`Starting from block ${this.currentBlock}`);
     } catch (err) {
-      log(`Failed to get starting block: ${err.message}. Retrying in 5s...`, 'error');
+      this.log(`Failed to get starting block: ${err.message}. Retrying in 5s...`, 'error');
       this.isPolling = false;
       setTimeout(() => {
         if (!this.isShuttingDown && !this.isPolling) this.startPolling();
@@ -527,11 +531,11 @@ class SmartEventWatcher {
         }
         this.currentBlock = endBlock;
         if (latestNumber > endBlock) {
-          log(`Polling backlog: processed to block ${endBlock}, latest is ${latestNumber}`);
+          this.log(`Polling backlog: processed to block ${endBlock}, latest is ${latestNumber}`);
         }
       }
     } catch (err) {
-      log(`Poll error: ${err.message}`, 'error');
+      this.log(`Poll error: ${err.message}`, 'error');
     }
     
     this.pollTimer = setTimeout(() => this.poll(), this.pollIntervalMs);
@@ -561,7 +565,7 @@ class SmartEventWatcher {
         continuationToken = events.continuation_token;
       } while (continuationToken);
     } catch (err) {
-      log(`Block ${blockNumber} error: ${err.message}`, 'error');
+      this.log(`Block ${blockNumber} error: ${err.message}`, 'error');
     }
   }
 
@@ -616,7 +620,7 @@ class SmartEventWatcher {
       if (this.currentMode === 'websocket') {
         // Check if WebSocket is still healthy
         if (!this.wsIsConnected) {
-          log('Health check: WebSocket not connected', 'warn');
+          this.log('Health check: WebSocket not connected', 'warn');
           this.handleWebSocketFailure('health_check');
         }
         // Could also check last event time and fallback if no events for too long
@@ -633,7 +637,7 @@ class SmartEventWatcher {
           return;
         }
 
-        log('Health check: Attempting WebSocket recovery...');
+        this.log('Health check: Attempting WebSocket recovery...');
         this.wsReconnectAttempts = 0;
         this.tryWebSocket().then(success => {
           if (success) {
@@ -647,7 +651,7 @@ class SmartEventWatcher {
 
   stop() {
     this.isShuttingDown = true;
-    log('Shutting down...');
+    this.log('Shutting down...');
     
     if (this.healthCheckTimer) {
       clearInterval(this.healthCheckTimer);
