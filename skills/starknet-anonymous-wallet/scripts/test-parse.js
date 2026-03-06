@@ -218,29 +218,65 @@ function parsePrompt(prompt, availableTokens = [], knownActions = []) {
   return { operations };
 }
 
-// Test prompts
-const testPrompts = [
-  "swap 10 ETH to STRK",
-  "swap 10 ETH to STRK then deposit in Typhoon",
-  "swp 5 USDC to ETH",
-  "trasnfer 100 STRK to alice",
-  "check my ETH balance",
-  "claim rewards then stake it in Ekubo",
-  "mint NFT then sell it on Starkbook",
-  "deposit 50 USDT",
-  "withdraw all ETH",
-  "bridge 20 STRK to Ethereum"
+// Test prompts + expectations
+const testCases = [
+  {
+    prompt: "swap 10 ETH to STRK",
+    assert: (r) => r.operations.length === 1 && r.operations[0].action === 'swap' && String(r.operations[0].tokenIn) === 'ETH' && String(r.operations[0].tokenOut) === 'STRK'
+  },
+  {
+    prompt: "swap 10 ETH to STRK then deposit in Typhoon",
+    assert: (r) => r.operations.length >= 2 && r.operations[0].action === 'swap' && r.operations[1].action === 'deposit'
+  },
+  {
+    prompt: "swp 5 USDC to ETH",
+    assert: (r) => r.operations.length === 1 && r.operations[0].action === 'swap' && r.operations[0].actionCorrected === true
+  },
+  {
+    prompt: "trasnfer 100 STRK to alice",
+    assert: (r) => r.operations.length === 1 && r.operations[0].action === 'transfer' && r.operations[0].actionCorrected === true
+  },
+  {
+    prompt: "check my ETH balance",
+    assert: (r) => r.operations.length === 1 && r.operations[0].isRead === true
+  },
+  {
+    prompt: "claim rewards then stake it in Ekubo",
+    assert: (r) => r.operations.length >= 2 && r.operations[0].action === 'claim' && r.operations[1].action === 'stake' && !!r.operations[1].tokenIn
+  },
+  {
+    prompt: "mint NFT then sell it on Starkbook",
+    assert: (r) => r.operations.length >= 2 && r.operations[0].action === 'mint' && r.operations[1].action === 'sell'
+  },
+  {
+    prompt: "deposit 50 USDT",
+    assert: (r) => r.operations.length === 1 && r.operations[0].action === 'deposit' && String(r.operations[0].tokenIn) === 'USDT'
+  },
+  {
+    prompt: "withdraw all ETH",
+    assert: (r) => r.operations.length === 1 && r.operations[0].action === 'withdraw' && String(r.operations[0].amount) === 'all'
+  },
+  {
+    prompt: "bridge 20 STRK to Ethereum",
+    assert: (r) => r.operations.length === 1 && r.operations[0].action === 'bridge' && String(r.operations[0].tokenIn) === 'STRK'
+  }
 ];
+
+let passed = 0;
+let failed = 0;
 
 console.log("=== PARSING TEST RESULTS ===\n");
 
-for (let i = 0; i < testPrompts.length; i++) {
-  const prompt = testPrompts[i];
+for (let i = 0; i < testCases.length; i++) {
+  const { prompt, assert } = testCases[i];
   const result = parsePrompt(prompt, availableTokens, knownActions);
-  
+  const ok = (() => {
+    try { return !!assert(result); } catch { return false; }
+  })();
+
   console.log(`Test ${i + 1}: "${prompt}"`);
   console.log(`Operations: ${result.operations.length}`);
-  
+
   result.operations.forEach((op, idx) => {
     console.log(`  ${idx + 1}. action: ${op.action}${op.rawAction ? ` (corrected from "${op.rawAction}")` : ''}`);
     console.log(`     amount: ${op.amount}`);
@@ -250,5 +286,12 @@ for (let i = 0; i < testPrompts.length; i++) {
     console.log(`     isReference: ${op.isReference}`);
     console.log(`     actionCorrected: ${op.actionCorrected}`);
   });
+
+  console.log(`Result: ${ok ? 'PASS' : 'FAIL'}`);
   console.log('');
+
+  if (ok) passed++; else failed++;
 }
+
+console.log(`Summary: passed=${passed}, failed=${failed}`);
+if (failed > 0) process.exit(1);
