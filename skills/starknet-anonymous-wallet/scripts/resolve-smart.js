@@ -11,7 +11,7 @@
  */
 
 import { Provider, CallData } from 'starknet';
-import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync, mkdirSync, renameSync } from 'fs';
 import { join, dirname, isAbsolute } from 'path';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
@@ -111,19 +111,26 @@ function verifyAndConsumeAttestation(token) {
   if (!/^[a-f0-9]{20,64}$/i.test(token)) return { ok: false, reason: 'format' };
 
   const p = join(ATTEST_DIR, `${token}.json`);
-  if (!existsSync(p)) return { ok: false, reason: 'not_found' };
+  const consumedPath = join(ATTEST_DIR, `${token}.consumed.${process.pid}.${Date.now()}.json`);
 
   try {
-    const data = JSON.parse(readFileSync(p, 'utf8'));
+    // Atomic claim (prevents parallel double-consume race)
+    renameSync(p, consumedPath);
+  } catch {
+    return { ok: false, reason: 'not_found' };
+  }
+
+  try {
+    const data = JSON.parse(readFileSync(consumedPath, 'utf8'));
     const now = Date.now();
     if (data.expiresAt && now > Number(data.expiresAt)) {
-      try { unlinkSync(p); } catch {}
+      try { unlinkSync(consumedPath); } catch {}
       return { ok: false, reason: 'expired' };
     }
-    // One-time consume
-    try { unlinkSync(p); } catch {}
+    try { unlinkSync(consumedPath); } catch {}
     return { ok: true };
   } catch {
+    try { unlinkSync(consumedPath); } catch {}
     return { ok: false, reason: 'corrupt' };
   }
 }
