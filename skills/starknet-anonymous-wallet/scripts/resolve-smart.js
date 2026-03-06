@@ -10,7 +10,7 @@
  * 5. Handles event watching with callbacks
  */
 
-import { Provider, CallData } from 'starknet';
+import { RpcProvider as Provider, CallData } from 'starknet';
 import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync, mkdirSync, renameSync, rmSync } from 'fs';
 import { join, dirname, isAbsolute } from 'path';
 import { fileURLToPath } from 'url';

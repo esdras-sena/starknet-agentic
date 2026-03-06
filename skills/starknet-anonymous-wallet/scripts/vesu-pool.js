@@ -17,7 +17,7 @@
  * }
  */
 
-import { Provider, Contract } from 'starknet';
+import { RpcProvider as Provider, Contract } from 'starknet';
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
