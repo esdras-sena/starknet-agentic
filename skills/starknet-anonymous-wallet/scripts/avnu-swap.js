@@ -43,7 +43,7 @@ async function getAllTokens() {
  * Match token symbols to AVNU tokens
  */
 async function matchTokens(sellSymbol, buySymbol) {
-  const tokens = (await getAllTokens()).filter(t => typeof t?.symbol === 'string');
+  const tokens = (await getAllTokens()).filter(t => typeof t?.symbol === 'string' && t.symbol.length > 0);
   const sellNeedle = String(sellSymbol || '').toLowerCase();
   const buyNeedle = String(buySymbol || '').toLowerCase();
 
