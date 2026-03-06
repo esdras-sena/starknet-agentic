@@ -20,7 +20,7 @@
  */
 
 import { Provider, Account, Contract, CallData, shortString, hash } from 'starknet';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, renameSync, rmSync } from 'fs';
 import { join, isAbsolute } from 'path';
 import { homedir } from 'os';
 import { resolveRpcUrl } from './_rpc.js';
@@ -77,32 +77,52 @@ function lootStateGetPending(accountAddress) {
   return lootStateGetEntry(map, accountAddress).pendingEncounter;
 }
 
-function lootStateSetLatest(accountAddress, adventurerId) {
-  if (accountAddress == null || adventurerId == null || adventurerId === '') return;
+function lootStateMutate(accountAddress, mutateFn) {
+  if (!accountAddress) return;
+  const lockDir = join(LOOT_STATE_DIR, '.lock');
+  const lockTimeoutMs = 2000;
+  const started = Date.now();
+
   try {
     mkdirSync(LOOT_STATE_DIR, { recursive: true });
+
+    // Acquire lock (atomic mkdir). Retry briefly while another process writes.
+    while (true) {
+      try {
+        mkdirSync(lockDir);
+        break;
+      } catch (e) {
+        if (Date.now() - started > lockTimeoutMs) return;
+      }
+    }
+
     const map = lootStateLoad();
     const entry = lootStateGetEntry(map, accountAddress);
-    entry.latestAdventurerId = String(adventurerId);
+    mutateFn(entry);
     lootStateWriteEntry(map, accountAddress, entry);
-    writeFileSync(LOOT_STATE_FILE, JSON.stringify(map, null, 2) + '\n', 'utf8');
+
+    const tmpPath = join(LOOT_STATE_DIR, `latest.${process.pid}.${Date.now()}.tmp`);
+    writeFileSync(tmpPath, JSON.stringify(map, null, 2) + '\n', 'utf8');
+    renameSync(tmpPath, LOOT_STATE_FILE);
   } catch {
     // best-effort
+  } finally {
+    try { rmSync(lockDir, { recursive: false, force: true }); } catch {}
   }
+}
+
+function lootStateSetLatest(accountAddress, adventurerId) {
+  if (accountAddress == null || adventurerId == null || adventurerId === '') return;
+  lootStateMutate(accountAddress, (entry) => {
+    entry.latestAdventurerId = String(adventurerId);
+  });
 }
 
 function lootStateSetPending(accountAddress, pending) {
   if (!accountAddress) return;
-  try {
-    mkdirSync(LOOT_STATE_DIR, { recursive: true });
-    const map = lootStateLoad();
-    const entry = lootStateGetEntry(map, accountAddress);
+  lootStateMutate(accountAddress, (entry) => {
     entry.pendingEncounter = Boolean(pending);
-    lootStateWriteEntry(map, accountAddress, entry);
-    writeFileSync(LOOT_STATE_FILE, JSON.stringify(map, null, 2) + '\n', 'utf8');
-  } catch {
-    // best-effort
-  }
+  });
 }
 
 function loadPersistedAdventurerId(accountAddress) {
