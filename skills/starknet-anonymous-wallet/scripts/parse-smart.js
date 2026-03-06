@@ -125,6 +125,16 @@ function saveRegistry(filename, data) {
   writeFileSync(filepath, JSON.stringify(data, null, 2) + '\n');
 }
 
+async function isContractDeployed(address) {
+  try {
+    const provider = new RpcProvider({ nodeUrl: resolveRpcUrl() });
+    const res = await provider.getClassAt(address);
+    return !!res;
+  } catch {
+    return false;
+  }
+}
+
 function loadProtocols() {
   const registry = loadRegistry('protocols.json');
   const protocols = {};
@@ -428,6 +438,15 @@ async function main() {
         console.log(JSON.stringify({
           success: false,
           error: "Invalid protocol address format (expected 0x-prefixed hex)"
+        }));
+        process.exit(1);
+      }
+
+      const deployed = await isContractDeployed(address);
+      if (!deployed) {
+        console.log(JSON.stringify({
+          success: false,
+          error: "Protocol address is not deployed on the configured network"
         }));
         process.exit(1);
       }
