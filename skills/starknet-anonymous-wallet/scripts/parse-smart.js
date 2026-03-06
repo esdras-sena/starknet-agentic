@@ -26,7 +26,7 @@
 
 import { RpcProvider } from 'starknet';
 import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, resolve as resolvePath } from 'path';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
 import crypto from 'crypto';
@@ -672,7 +672,8 @@ async function main() {
   }));
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+const __entryFile = process.argv[1] ? resolvePath(process.argv[1]) : null;
+if (__entryFile && fileURLToPath(import.meta.url) === __entryFile) {
   main().catch(err => {
     console.log(JSON.stringify({
       success: false,
